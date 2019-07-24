@@ -1,0 +1,20 @@
+
+fn_RangeTUI()
+{
+  # Library function to turn a list array into a selectable list
+  typeset local arr_Input=${1}
+  typeset local arr_Range=${2:-0}
+  typeset int_Count=0
+  for x in  ${arr_Input} ; do
+    (( int_Count++ ))
+    [[ "$(echo ${arr_Range} | grep -w ${int_Count})" ]] &&     b_Selected=">" || b_Selected=" "
+    echo "[${b_Selected}]" $x
+  done
+
+}
+
+
+arr_List="a b c d e f g"
+fn_RangeTUI "${arr_List}"
+fn_RangeTUI "${arr_List}" "$(fn_Range "1-4")"
+
