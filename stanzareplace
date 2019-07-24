@@ -1,0 +1,55 @@
+stanza_replace()
+{
+  ## <REPLACE_STRING> <file> <replace file>
+  typeset local USAGE="${FUNCNAME}: <string> <stanza file> <replace file>"
+  typeset local STANZA_BLOCK_STRING=$1
+  typeset local FILE=$2
+  typeset local CHANGE_BLOCK=$3
+  typeset local TMPFILE=/tmp/stanza.$$
+
+  ## Check all variables required are passed
+  [[ ${#@} -ne 3 ]] && echo "${USAGE}" && return 1
+
+  ## Check files are readable
+  [[ ! -r ${FILE} ]] &&  echo "Cannot access stanza file <${FILE}>" && return 1
+  [[ ! -r ${CHANGE_BLOCK} ]] && echo "Cannot access merge file <${CHANGE_BLOCK}>" && return 1
+
+  ## Get number of lines in file
+  typeset LINE_COUNT=$(wc -l ${FILE} | cut -d" " -f1)
+
+  ## Find the start point of the stanza block to replace
+  LINE_START=$(grep -in "^ *< *${STANZA_BLOCK_STRING} *>" ${FILE} | head -1 | cut -d: -f1)
+  [[ ! "${LINE_START}" ]] && echo "Cannot find stanza block ${STANZA_BLOCK_STRING}" && return 1
+
+  ## Show the original file upto the point of the replacement stanza
+  (( BLOCK1=LINE_START - 1 ))
+  if [[ ${BLOCK1} -gt 1 ]] ; then
+    head -${BLOCK1} ${FILE}
+  else
+    (( LINE_START=1 ))
+  fi
+
+  ## Insert the new file
+  cat ${CHANGE_BLOCK}
+  echo ""
+
+  ## and tail the rest of the file to a temp area
+  (( LINE_START++ ))
+  if [[ ${LINE_START} -lt ${LINE_COUNT} ]] ; then
+    tail -n +${LINE_START} ${FILE} > ${TMPFILE}
+  fi
+
+
+  ## Find the next STANZA block in whats left
+  BLOCK2=$(grep -in "^[; ]*<.*>" ${TMPFILE} | head -1 | cut -d: -f1 )
+
+  ## and if we find one (i.e we didnt replace the last stanza) show the rest of the original file
+  if [[ ${BLOCK2} ]] && [[ ${BLOCK2} -lt ${LINE_COUNT} ]] ; then
+    tail -n +${BLOCK2} ${TMPFILE}
+  fi
+
+  ## Remove the tmp file
+  rm ${TMPFILE}
+}
+# stanza_replace BLOCK2 A M
+
