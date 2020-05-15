@@ -1,0 +1,601 @@
+#!/bin/ksh
+#----------------------------------------------------------------------------
+# KSH Script template version 2
+#
+#                          <Project name> PROJECT
+# 
+#
+#----------------------------------------------------------------------------
+#
+# COMPONENT	:	rundmc
+#
+# AUTHOR	:	Marc Loftus
+# DATE 		:	14/09/2010
+#
+#
+#
+# DESCRIPTION   :	Run ScORCH Commands. This deamon is designed to watch 
+#                 a specified directory and run scorch jobs that come in
+#			            from the self service web front-end.
+#
+#
+#----------------------------------------------------------------------------
+#
+# HISTORY
+# -------
+#
+# AUTHOR                        : Marc Loftus
+# DATE                          : 14/09/2010
+# RFC NUMBER                    : 0.1
+#
+# DESCRIPTION           :
+#
+# AUTHOR                        : Marc Loftus
+# DATE                          : 14/10/2010
+# RFC NUMBER                    : 1.1
+# DESCRIPTION                   : Added Status only updates option
+#                                 Added fix option
+#----------------------------------------------------------------------------
+# DEBUG LIBRARY FUNCTIONS SETTINGS
+# ================================
+PROG_NAME=`basename $0`
+if [ "`dirname $0 | cut -c1`" = "/" ] ; then
+  RUN_DIR=`dirname $0`
+else
+  RUN_DIR=`pwd`/`dirname $0`
+fi
+LOG_FILE=/deployment/scorch/log/$PROG_NAME.log	# LOG File
+LOGGING=file	# Log level: file | none | interactive (Used with inform)
+DEBUG=off    	# Debug Level: on | off | full (Used with check_status)
+VERSION=1.1
+USAGE="usage: $PROG_NAME [-d] [-f] [-s]"
+
+if [ $# -ne 0 ] ; then
+  while [ $# -gt 0 ] ; do
+    case $1 in
+      -d ) DEBUG=full ;;
+      -f ) FIX=1 ;;
+      -h ) print "$PROG_NAME [-h]|[-d]|[-v]" ;;
+      -v ) echo "VERSION[$PROG_NAME] $VERSION" ; exit 0 ;;
+      -s ) STATUS_ONLY=1 ;;
+      -* ) echo "incorrect parameter ($1) specified" ; echo $USAGE ; exit 1 ;;
+      *  ) FILE=$1 ;;
+    esac
+    shift
+  done
+fi
+
+init()
+{
+  
+  clear
+  inform " Initialising. Please wait...."
+  # Your INIT Goes here
+  # eg:
+
+  # JOB DIRECTORIES
+  # ===============
+  DEPLOYMENT_ROOT_DIR=/view/ccv4bin/vobs/Deployment/Web/cgi-bin
+  if [[ $FILE = "demo" ]] ; then
+    DEPLOYMENT_ROOT_DIR=~/ss
+    FILE=""
+  else
+    DEPLOYMENT_ROOT_DIR=/view/ccv4bin/vobs/Deployment/Web/cgi-bin/jobs
+  fi 
+
+
+  # WEB SIDE
+  DEPLOYMENT_UNCONFIRMED_DIR=$DEPLOYMENT_ROOT_DIR/requests
+  DEPLOYMENT_CANCELLED_DIR=${DEPLOYMENT_ROOT_DIR}/cancelled
+  DEPLOYMENT_CONFIRMED_DIR=${DEPLOYMENT_ROOT_DIR}/confirmed
+  DEPLOYMENT_ARCHIVE_DIR=${DEPLOYMENT_ROOT_DIR}/archive
+  DEPLOYMENT_NEW_DIR=${DEPLOYMENT_ROOT_DIR}/new
+
+  # ScORCH SIDE
+  DEPLOYMENT_QUEUE_DIR=${DEPLOYMENT_ROOT_DIR}/queue
+  DEPLOYMENT_RUNNING_DIR=${DEPLOYMENT_ROOT_DIR}/running
+  DEPLOYMENT_COMPLETED_DIR=${DEPLOYMENT_ROOT_DIR}/completed
+  DEPLOYMENT_DELETED_DIR=${DEPLOYMENT_ROOT_DIR}/deleted
+  DEPLOYMENT_START_DIR=${DEPLOYMENT_ROOT_DIR}/start
+
+  # FAIL STATES
+  DEPLOYMENT_FAILED_DIR=${DEPLOYMENT_ROOT_DIR}/failed
+  DEPLOYMENT_INVALID_DIR=${DEPLOYMENT_ROOT_DIR}/invalid
+
+  #_GMT="TZ=GMT0BST"      # Turn on for British Summer Time
+  _GMT="TZ=GMT"                # Turn on for GMT
+  eval ${_GMT}
+  eval export ${_GMT}
+
+
+
+  # JOB STRUCTURE
+  # =============
+  FILE_PREFIX=rundmc_
+  FILE_FIELD1=_
+  FILE_SUFFIX=.pl
+  FILE_FIELD2=.
+
+  # ScORCH TRACKING
+  ScORCH=/deployment/scripts/bin/scorch
+  ScORCH_ROOT_DIR=/deployment/scorch/jobs
+  AUDIT_TRAIL="Audit-Trail|\${STATUS}|\$(date)"
+
+  #DEBUG=1
+
+  UPDATE_FILE=${DEPLOYMENT_ROOT_DIR}/statusupdate
+  CreateFile ${UPDATE_FILE}
+
+  CreateFile ${LOG_FILE}
+
+  WHO=`whoami`
+  SLEEP_COUNT=60
+  
+}
+
+CreateFile()
+{
+  _FILE=$1
+  touch $_FILE > /dev/null 2>&1
+  chmod 664 $_FILE > /dev/null 2>&1
+  [ "$2" = "blank" ] && cat /dev/null > $_FILE
+}
+
+CheckComfiredDir()
+{
+  # AUTHOR              : <name>
+  #
+  # DATE CREATED: <date>
+  #
+  # DESCRIPTION :  <it does this>
+  #
+  # IN                  :
+  # IN                  :
+  # OUT                 :
+  # RETURN              : SUCCESS -
+  #                     : FAILURE -
+  REFER_MODULE=`pop "$MODULE"`
+  MODULE=`push "$MODULE" "CheckComfiredDir"`
+  SCENE="Entering CheckComfiredDir"
+  check_status 0 "Entering CheckComfiredDir"
+  # COMMANDS GO HERE
+
+  if [ $FILE ] ; then
+    if [ -f ${DEPLOYMENT_UNCONFIRMED_DIR}/${FILE_PREFIX}${FILE}${FILE_SUFFIX} ] ; then
+      inform "FILE direct  ${DEPLOYMENT_UNCONFIRMED_DIR}/${FILE_PREFIX}${FILE}${FILE_SUFFIX} "
+      ${ScORCH} -s -n -file ${DEPLOYMENT_UNCONFIRMED_DIR}/${FILE_PREFIX}${FILE}${FILE_SUFFIX}
+        RC=$?
+        if [ $RC = 0 ] ; then
+          mv ${DEPLOYMENT_UNCONFIRMED_DIR}/${FILE_PREFIX}${FILE}${FILE_SUFFIX} ${DEPLOYMENT_QUEUE_DIR}/. && \
+              print "Confirmed direct at $(date +"%T") " >> ${DEPLOYMENT_QUEUE_DIR}/${FILE_PREFIX}${FILE}${FILE_SUFFIX} && \
+              inform "Confirmed direct at $(date +"%T") " 
+
+        else
+          case $RC in
+            1  ) print " $ScORCH not called correctly" ; echo "EMAIL ScORCH issue - deployment" ;;
+            2  ) print " Service missing" ; echo "EMAIL Web interface issue - User/deployment" ;;
+            3  ) print " $ScORCH directories not correctly configured" ; echo "EMAIL directories not configured - ScORCH" ;;
+            10 ) print " Issue with user email lookup" ; echo "EMAIL user lookup?" ;;
+            20 ) print " Issue - cant find plugin" ;
+                         print "EMAIL deploygroup of plugin issue" ;;
+ 
+            * ) print " Unhandled error:$RC" ;;
+          esac
+          mv ${DEPLOYMENT_UNCONFIRMED_DIR}/${FILE_PREFIX}${FILE}${FILE_SUFFIX} ${DEPLOYMENT_INVALID_DIR}/. && \
+              print "Invalid request $(date +"%T") " >> ${DEPLOYMENT_QUEUE_DIR}/${FILE_PREFIX}${FILE}${FILE_SUFFIX} && \
+              inform "Invalid request $(date +"%T") " 
+        fi
+
+    else
+      print "Invalid Reference number used"
+      ls ${DEPLOYMENT_UNCONFIRMED_DIR}/${FILE_PREFIX}*
+    fi
+  else
+    if [ "`ls ${DEPLOYMENT_CONFIRMED_DIR}/${FILE_PREFIX}* 2>/dev/null`" ] ; then
+      for _EACHFILE in `ls ${DEPLOYMENT_CONFIRMED_DIR}/${FILE_PREFIX}* `  ; do
+        inform "Processing ${_EACHFILE}"
+        ${ScORCH} -s -n -file $_EACHFILE
+        RC=$?
+        if [ $RC = 0 ] ; then
+          mv $_EACHFILE ${DEPLOYMENT_QUEUE_DIR}/. && print "Confirmed at $(date +"%T") " >> ${DEPLOYMENT_QUEUE_DIR}/$(basename ${_EACHFILE})
+
+        else
+          case $RC in
+            1  ) print " $ScORCH not called correctly" ; echo "EMAIL ScORCH issue - deployment" ;;
+            2  ) print " Service missing" ; echo "EMAIL Web interface issue - User/deployment" ;;
+            3  ) print " $ScORCH directories not correctly configured" ; echo "EMAIL directories not configured - ScORCH" ;;
+            10 ) print " Issue with user email lookup" ; echo "EMAIL user lookup?" ;;
+            20 ) print " Issue - cant find plugin" ;
+                         print "EMAIL deploygroup of plugin issue" ;;
+ 
+            * ) print " Unhandled error:$RC" ;;
+          esac
+          mv $_EACHFILE ${DEPLOYMENT_INVALID_DIR}/. && print "Invalid request $(date +"%T") " >> $${DEPLOYMENT_INVALID_DIR}/{_EACHFILE}
+        fi
+      done
+      print "\n\n By Grapthar's hammer... You shall be deployed\n\n"
+    else
+      print "\n\n ScORCH section : No confirmed files found in ${DEPLOYMENT_CONFIRMED_DIR}"
+    fi
+  fi
+
+
+  check_status 0 " Leaving CheckComfiredDir"
+  MODULE=`cdr "$MODULE"`
+}
+
+FeedbackStatus()
+{
+  # AUTHOR		: <name>
+  #
+  # DATE CREATED: <date>
+  #
+  # DESCRIPTION	:  <it does this>
+  #				  
+  # IN 			: 
+  # OUT			: 
+  # RETURN		: SUCCESS - 
+  #      		: FAILURE -
+  REFER_MODULE=`pop "$MODULE"`
+  MODULE=`push "$MODULE" "FeedbackStatus"`
+  SCENE="Entering FeedbackStatus"
+  check_status 0 "Entering FeedbackStatus"
+
+  print "\n Status check..." 
+  
+
+  # Check each directory 
+  for _EACHDIRECTORY in ${DEPLOYMENT_FAILED_DIR} ${DEPLOYMENT_RUNNING_DIR} ${DEPLOYMENT_QUEUE_DIR} ${DEPLOYMENT_NEW_DIR} ${DEPLOYMENT_START_DIR} ; do
+
+    # For each file found in each directory
+    for _EACHREQUEST in $(ls ${_EACHDIRECTORY}) ; do
+
+      # Find the refence number of the file
+      _EACHREFERENCE=$(echo $_EACHREQUEST | cut -d$FILE_FIELD1 -f2 | cut -d$FILE_FIELD2 -f1)
+
+      # Use the reference number to find the assciated ScORCH job
+      [ "${_EACHREFERENCE}" ] && _TARGET_DIR=${DEPLOYMENT_ROOT_DIR}/$(cd ${ScORCH_ROOT_DIR} ; dirname $(find . -ctime -1 -exec grep -l $_EACHREFERENCE {} \;) )
+#cd ${ScORCH_ROOT_DIR} 
+      # [ "$DEBUG" ] && print ${_EACHDIRECTORY}:${_EACHREQUEST}
+#find . -ctime -1 -exec grep -l $_EACHREFERENCE {} \;
+
+      # Update the status of the Web job base on the ScORCH job
+      # [ "$DEBUG" ] && print mv ${_EACHDIRECTORY}/$FILE_PREFIX$_EACHREFERENCE$FILE_SUFFIX ${_TARGET_DIR}
+      mv ${_EACHDIRECTORY}/$FILE_PREFIX$_EACHREFERENCE$FILE_SUFFIX ${_TARGET_DIR} > /dev/null 2>&1 && \
+         print "$(basename ${_TARGET_DIR}) at $(date +"%T") " >> ${_TARGET_DIR}/$FILE_PREFIX$_EACHREFERENCE$FILE_SUFFIX && \
+         inform "$FILE_PREFIX$_EACHREFERENCE$FILE_SUFFIX $(basename ${_TARGET_DIR}) at $(date +"%T")"
+
+      sleep 2
+    done
+  done
+
+  check_status 0 " Leaving FeedbackStatus"
+  MODULE=`cdr "$MODULE"`
+}
+
+HouseKeeping()
+{
+  # AUTHOR		: <name>
+  #
+  # DATE CREATED: <date>
+  #
+  # DESCRIPTION	:  <it does this>
+  #				  
+  # IN 			: 
+  # IN 			: 
+  # OUT			: 
+  # RETURN		: SUCCESS - 
+  #      		: FAILURE -
+  REFER_MODULE=`pop "$MODULE"`
+  MODULE=`push "$MODULE" "HouseKeeping"`
+  SCENE="Entering HouseKeeping"
+  check_status 0 "Entering HouseKeeping"
+
+  print "\n House Keeping..." 
+  find ${DEPLOYMENT_DELETED_DIR}/*.* -mtime +7 -exec rm {} \; > /dev/null 2>&1
+  find ${DEPLOYMENT_UNCONFIRMED_DIR}/*.* -mtime +1 -exec mv {} ${DEPLOYMENT_DELETED_DIR}/. \; > /dev/null 2>&1
+  find ${DEPLOYMENT_COMPLETED_DIR}/*.* -mtime +1 -exec mv {} ${DEPLOYMENT_ARCHIVE_DIR}/. \; > /dev/null 2>&1
+  find ${DEPLOYMENT_CANCELLED_DIR}/*.* -mtime +1 -exec mv {} ${DEPLOYMENT_DELETED_DIR}/. \; > /dev/null 2>&1
+
+  check_status 0 " Leaving HouseKeeping"
+  MODULE=`cdr "$MODULE"`
+}
+
+FixJobs()
+{
+  # AUTHOR		: <name>
+  #
+  # DATE CREATED: <date>
+  #
+  # DESCRIPTION	:  <it does this>
+  #				  
+  # IN 			: 
+  # IN 			: 
+  # OUT			: 
+  # RETURN		: SUCCESS - 
+  #      		: FAILURE -
+  REFER_MODULE=`pop "$MODULE"`
+  MODULE=`push "$MODULE" "FixJobs"`
+  SCENE="Entering FixJobs"
+  check_status 0 "Entering FixJobs"
+
+  for _EACHFIXJOB in $(ls ${ScORCH_ROOT_DIR}/running) ; do
+    echo $_EACHFIXJOB
+    REFERENCE=$(grep "#REQUEST REF" ${ScORCH_ROOT_DIR}/running/${_EACHFIXJOB} | awk -F":" '{print $2}' | sed 's/ //g' )
+    SERVICE=$(basename $(echo ${_EACHFIXJOB}|cut -d_ -f1 ))
+    SERVERENV=$(echo ${_EACHFIXJOB}|cut -d_ -f2 )
+    LOGICAL_ENV=$(echo ${_EACHFIXJOB}|cut -d_ -f4)
+    [ "$(grep -i "service" ${DEPLOYMENT_RUNNING_DIR}/${FILE_PREFIX}${REFERENCE}${FILE_SUFFIX})" ]  || \
+        echo "Service: $SERVICE" >> ${DEPLOYMENT_RUNNING_DIR}/${FILE_PREFIX}${REFERENCE}${FILE_SUFFIX}
+    [ "$(grep -i "Server Env" ${DEPLOYMENT_RUNNING_DIR}/${FILE_PREFIX}${REFERENCE}${FILE_SUFFIX})" ]  || \
+        echo "Server Environment: $SERVERENV" >> ${DEPLOYMENT_RUNNING_DIR}/${FILE_PREFIX}${REFERENCE}${FILE_SUFFIX}
+    [ "$(grep -i "logical env" ${DEPLOYMENT_RUNNING_DIR}/${FILE_PREFIX}${REFERENCE}${FILE_SUFFIX})" ]  || \
+        echo "Logical Environment: $LOGICAL_ENV" >> ${DEPLOYMENT_RUNNING_DIR}/${FILE_PREFIX}${REFERENCE}${FILE_SUFFIX}
+  done
+
+
+  check_status 0 " Leaving FixJobs"
+  MODULE=`cdr "$MODULE"`
+}
+
+##########################################################################
+
+
+function_template()
+{
+  # AUTHOR		: <name>
+  #
+  # DATE CREATED: <date>
+  #
+  # DESCRIPTION	:  <it does this>
+  #				  
+  # IN 			: 
+  # IN 			: 
+  # OUT			: 
+  # RETURN		: SUCCESS - 
+  #      		: FAILURE -
+  REFER_MODULE=`pop "$MODULE"`
+  MODULE=`push "$MODULE" "function_name"`
+  SCENE="Entering function"
+  check_status 0 "Entering function"
+  # COMMANDS GO HERE
+  check_status 0 " Leaving function"
+  MODULE=`cdr "$MODULE"`
+}
+
+##########################################################################
+view_change_env()
+{
+  set | more
+  echo " "
+  echo "Enter new Variable <or leave blank> and press <RETURN>"
+  echo " "
+  read ans
+  echo "Setting.."
+  eval $ans
+  sleep 1
+}
+
+check_log()
+{
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+#
+# Add these parameters to your script before you use the debug library
+#    PARAMETER=VALUE
+#    PROG_NAME=`basename $0`
+#    LOG_FILE=/tmp/smecontrol.log	# LOG File
+#    LOGGING=file			# Log level: full | none | interactive
+#    DEBUG=off				# Used with check_status: on | off | full
+case $LOGGING in
+  file|full)
+    if [ "$LOG_FILE" ] ;	then
+      if [ ! -f $LOG_FILE ] ;	then
+        echo >$LOG_FILE "[${PROG_NAME}] log file created on `date`"
+        if [ $? -ne 0 ] ;	then
+          echo >&2 "WARNING[${PROG_NAME}] cannot create a new log file (${LOG_FILE})"
+          LOGGING=interactive
+          LOG_FILE=/dev/null
+        fi
+      else
+        if [ ! -w $LOG_FILE ] ;	then
+          echo >&2 "WARNING[${PROG_NAME}] cannot write to the log file (${LOG_FILE})"
+          LOGGING=interactive
+          LOG_FILE=/dev/null
+        fi
+      fi
+    else
+      echo >&2 "WARNING[${PROG_NAME}] no log file defined"
+      LOGGING=interactive
+      LOG_FILE=/dev/null
+    fi
+    ;;
+    none|interactive)
+      LOG_FILE=/dev/null
+    ;;
+    *)
+      echo >&2 "WARNING[${PROG_NAME}] \$LOGGING set to an illegal value (${LOGGING})"
+      LOGGING=interactive
+      LOG_FILE=/dev/null
+  esac
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+}
+##########################################################################
+inform()
+{
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+# check_log expects a string or a quoted command and outputs the results
+# to the specified location, normally to screen and a log file. The log file
+# has the added information of a Date Time stamp
+#
+# Example:
+# 	inform "The program found these files"
+#	inform "`ls`"
+#
+check_log
+if [ $LOGGING != none -o $LOGGING != file ] ;	then
+  echo >&2 "$1"
+fi
+echo >> $LOG_FILE "INFORM[${PROG_NAME}] $1 ($WHO on `date '+%D %T'`)"
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+}
+##########################################################################
+check_file()
+{
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+#
+# argument 1 = File to be checked
+#
+if [ `ls $1` ] ; then
+  check_status 0 "Found $1"
+else
+  inform "check_file($1) DID NOT FIND A FILE"
+  exit
+fi
+}
+##########################################################################
+push()
+{
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+#
+# argument 1 = Stack list
+# argument 2 = Item to add
+# return     = new stack
+#
+echo "$1 $2"
+}
+##########################################################################
+pop()
+{
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+#
+# argument 1 = Stack list
+# return     = new stack
+#
+echo $1 | awk '{print $NF}'
+}
+##########################################################################
+cdr()
+{
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+#
+# argument 1 = Stack list
+# return     = new stack
+#
+echo $1 | awk '{for ( i = 1; i < NF; i++) print $i }'
+}
+##########################################################################
+check_status()
+{
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+#
+# argument 1 = status to be checked
+# argument 2 = command name
+# argument 3 = NOEXIT flag
+#
+# check_status can be used in 3 ways. 
+# Either to provide useful information during the execution of a script
+# when debugging is turned on (DEBUG=on or DEBUG=full).
+#	check_status 0 "got here"
+#
+# to provide error checking and break points
+# 	cp $A $B
+# 	check_status $? "Copying File" 	(if copying fails the script will exit)
+#
+# 	ls $A
+#	check_status $? "Checking for file" NOEXIT
+#
+# or an undocumented feature for use during development to run internal
+# commands like changing environment variable in DEBUG=full mode.
+# CHECK DEBUG and inform
+# CHECK FOR ARGUMENTS
+# ===================
+if [ $1 -ne 0 ] ; then
+  inform "$2 - FAILED with status code $1 ##################"
+  if [ "$3" != "NOEXIT" ] ; then
+    exit $1
+  else
+    return $1
+  fi
+else
+  if [ $DEBUG != "off" ] ; then
+    echo "[DEBUG]	$2"
+    echo "[DEBUG]	$2" >> $LOG_FILE
+    if [ $DEBUG = "full" ] ; then
+      echo " "
+      echo "             -- Press <return> or q to quit -- "
+      read ans
+      if [ "$ans" = "q" ] ; then
+        exit 0 
+      else
+        while [ "$ans" != "" ] ; do
+          if [ "$ans" != "" ] ; then
+            eval $ans
+          fi
+        done
+      fi
+    fi
+  fi
+  return 0
+fi
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+}
+##########################################################################
+log_trap()
+{
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+  inform "$1"
+  inform " "
+  inform "Nested Module    : 	${MODULE}"
+  inform "Current Module   :	`pop \"$MODULE\"`"
+  inform "Referring Module : 	$REFER_MODULE"
+  inform "Scene            :	$SCENE"
+  echo " "
+  exit 1
+}
+trap "log_trap \"\n\nTERMINATED: User probably logged out\"" 1
+trap "log_trap \"\n\nTERMINATED: User probably ctrl-c\"" 2
+trap "log_trap \"\n\nTERMINATED: Illegal Instruction\"" 4
+trap "log_trap \"\n\nTERMINATED: Probably via kill\"" 15
+#trap "log_trap \"\n\nTERMINATED: ERR\"" ERR
+# LIBRARY FUNCTION 
+# DO NOT MODIFY
+##########################################################################
+#MAIN
+MODULE="main"
+init
+
+# Check WEB side for confirmed requests
+[ "$STATUS_ONLY" ] || CheckComfiredDir
+
+
+# Check BACK side for request status
+if [ "$STATUS_ONLY" ] ; then
+  while : ; do
+    FeedbackStatus
+    HouseKeeping
+    date > ${UPDATE_FILE}
+    sleep $SLEEP_COUNT
+  done
+else
+  FeedbackStatus
+  HouseKeeping
+  date > ${UPDATE_FILE}
+fi
+
+
+[ "$FIX" ] && FixJobs
+
+
+
+exit
