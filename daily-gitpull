@@ -1,0 +1,54 @@
+#!/bin/bash
+# UPDATE GIT REPOS
+# ================
+
+# Change pool as required
+str_Org=pool
+# Change git root as required
+dir_Git=~/git
+
+
+for x in $(repos -repo) ; do
+  printf "============ $x ==================\n\n"
+
+ # echo cd ${dir_Git}/$x
+  mkdir -p ${dir_Git}/$x
+  cd ${dir_Git}/$x
+
+  if [[ ! -d .git ]] ; then
+    printf "Need to clone $x\n"
+    cd ..
+    git clone git@github.com:${str_Org}/$x.git
+  fi
+
+  cd ${dir_Git}/$x
+  git fetch
+  str_output=$(git status)
+
+
+  if [[ "${str_output}" =~ "On branch master" ]] ; then
+    printf "On master branch\n"
+    if [[ "${str_output}" =~ "git pull" ]] ; then
+       printf "cd ${dir_Git}/$x\n"
+      git pull
+    else
+      printf "Up-to-date\n"
+    fi
+  else
+    printf "Not on master branch\n"
+    str_branch=$(git status | grep "On branch " | awk -F" " '{print $3}')
+    echo "Current branch: ${str_branch}"
+    git checkout master
+    git fetch
+    str_output=$(git status)
+    if [[ "${str_output}" =~ "git pull" ]] ; then
+       printf "cd ${dir_Git}/$x\n"
+      git pull
+    else
+      printf "Up-to-date\n"
+    fi
+    git checkout ${str_branch}
+  fi
+  printf "\n"
+done
+
