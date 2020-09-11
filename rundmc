@@ -10,7 +10,7 @@
 # COMPONENT	:	rundmc
 #
 # AUTHOR	:	Marc Loftus
-# DATE 		:	14/09/2010
+# DATE 		:	11/09/2020
 #
 #
 #
@@ -25,16 +25,9 @@
 # -------
 #
 # AUTHOR                        : Marc Loftus
-# DATE                          : 14/09/2010
+# DATE                          : 11/09/2020
 # RFC NUMBER                    : 0.1
 #
-# DESCRIPTION           :
-#
-# AUTHOR                        : Marc Loftus
-# DATE                          : 14/10/2010
-# RFC NUMBER                    : 1.1
-# DESCRIPTION                   : Added Status only updates option
-#                                 Added fix option
 #----------------------------------------------------------------------------
 # DEBUG LIBRARY FUNCTIONS SETTINGS
 # ================================
@@ -75,12 +68,12 @@ init()
 
   # JOB DIRECTORIES
   # ===============
-  DEPLOYMENT_ROOT_DIR=/view/ccv4bin/vobs/Deployment/Web/cgi-bin
+  DEPLOYMENT_ROOT_DIR=/view/Deployment/Web/cgi-bin
   if [[ $FILE = "demo" ]] ; then
     DEPLOYMENT_ROOT_DIR=~/ss
     FILE=""
   else
-    DEPLOYMENT_ROOT_DIR=/view/ccv4bin/vobs/Deployment/Web/cgi-bin/jobs
+    DEPLOYMENT_ROOT_DIR=/view/Deployment/Web/cgi-bin/jobs
   fi 
 
 
