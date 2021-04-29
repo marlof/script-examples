@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+# Looking for various ways to map jinja from the shell
+# awk -v var="{{" -v var2="}}" -f sedjinja.awk ${file_MAP} > /tmp/file.sed
+#
+# sedjinja.awk
+# BEGIN {
+#   FS="="
+# }
+# !/^ *#/ && NF {
+#  print "s#" var1 $s1 var2 "#" $2 "#g"
+# }
+# #  will store variables from lines {{ }}
+#    VARS="$(mktemp -p /dev/shm/ -t "$SCRIPTNAME.vars.XXXX")"
+#   elif [[ $line =~ ^\{\{\ (.*)=(.*)\ \}\} ]]; then
+#    eval "${BASH_REMATCH[1]}"="${BASH_REMATCH[2]}"
+#    declare -p "${BASH_REMATCH[1]}" >> "$VARS"
+#    echo "export ${BASH_REMATCH[1]}" >> "$VARS"
+
