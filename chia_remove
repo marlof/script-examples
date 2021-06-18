@@ -1,0 +1,23 @@
+chia_remove() {
+
+  # Remove leech/seed connections by country (usful for embargo countries)
+  #
+  # A default of Iran has been used as an example
+  #
+  # usage:    chia_remove "<country name>"
+  #
+  # Prerequisite - The chia python venv must have been source". ./activate" 
+  
+  IP_LIST="$(chia show -c | grep FULL_NODE | awk -F" " '{print $2}')"
+  DELCOUNTRY="${1:-Iran}"
+  for eachIP in $IP_LIST ; do
+    COUNTRY=$(curl -s http://api.db-ip.com/v2/free/${eachIP} | grep -i countryname | awk -F":" '{print $NF}')
+    if echo $COUNTRY | grep -qs "$DELCOUNTRY" ; then
+      ID=$(chia show -c | grep $eachIP | awk -F" " '{print $4}' | tr -d '.')
+      echo "Removing $eachIP : $DELCOUNTRY"
+      chia show -r $ID > /dev/null 2>&1
+    else
+      echo "$eachIP:${COUNTRY}"
+    fi
+  done
+}
