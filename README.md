@@ -7,6 +7,8 @@ bump                 Bash script takes a version argument and a major, minor, ma
 
 checkit              Extendable Bash script to check one or many servers against system prerequisites
 
+chai_remove          Remove selected countries from leeching
+
 create_git_project   Sets up a bare project on the git repo
 
 daily-gitpull        Used to clone/pull/branch check all your configured git repos in one go
