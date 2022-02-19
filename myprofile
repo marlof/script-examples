@@ -1,0 +1,25 @@
+start_agent()
+{
+    killall ssh-agent 2> /dev/null
+    ssh-agent | sed 's/ Agent pid//' > $SSH_ENV
+    . $SSH_ENV > $SSH_PID_FILE
+    ssh-add ~/.ssh/id_rsa 2> /dev/null
+}
+
+mkdir -p "$HOME/.ssh/agent"                       # keeps agents more secure than in /tmp
+SSH_TMOUT=2678400                                 # 31 days (change as required)
+SSH_ENV="$HOME/.ssh/agent/env.$(hostname)"        # In case servers share home drive
+SSH_PID_FILE="$HOME/.ssh/agent/pid.$(hostname)"
+
+if [[ -e $SSH_PID_FILE ]]; then
+    SSH_PID=$(< $SSH_PID_FILE)
+    PROCESS=$(ps -p $SSH_PID+)
+
+    if [[ $PROCESS =~ 'ssh-agent' ]]; then
+        . $SSH_ENV > $SSH_PID_FILE
+    else
+        start_agent
+    fi
+else
+    start_agent
+fi
