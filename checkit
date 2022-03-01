@@ -31,7 +31,7 @@ check_command()
   typeset l_commandname=$1
   typeset l_arrayname=$2
   typeset l_newarrayname=$3
-  eval set -A ${l_newarrayname}
+  typeset -a ${l_newarrayname}
   typeset l_count=0
   typeset l_tmpfile=/tmp/${l_newarrayname}.$$
   
