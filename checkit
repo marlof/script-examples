@@ -13,7 +13,7 @@ if [ $# -ne 0 ] ; then
  esac
 fi
 
-typeset -a _servers=$HOSTS
+typeset -a _servers=($HOSTS)
 
 _count=0
 for _single_server in ${_servers[*]} ; do
