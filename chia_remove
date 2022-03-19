@@ -1,5 +1,5 @@
 #!/bin/bash
-# Remove leech/seed connections by country (usful for embargo countries like Russia - default)
+# Remove leech/seed connections by country (useful for embargo countries like Russia - default)
 #
 # A default of Iran has been used as an example
 #
