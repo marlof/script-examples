@@ -29,7 +29,7 @@ chia show -c > ${file_Cache}
 touch $file_IP
 # Generate Country cache list
 for each_IP in $lst_IPS ; do
-  printf "$(grep ${each_IP} ${file_Cache}) $(grep -A1 ${each_IP} ${file_Cache} | tail -1 | awk -F" " '{print $3}' ) $(fn_ShowCountry ${each_IP})\n"
+  printf "$(grep ${each_IP} ${file_Cache}) $(grep -A1 ${each_IP} ${file_Cache} | tail -1 | awk -F" " '{print $2}' ) $(fn_ShowCountry ${each_IP})\n"
   if [[ $(fn_ShowCountry ${each_IP}) =~ "${str_Country}" ]] ; then
     echo "Removing $(grep $each_IP ${file_IP})"
     str_NodeID=$(chia show -c | grep ${each_IP} | awk -F" " '{print $4}')
