@@ -1,0 +1,9 @@
+fn_GenCert()
+{
+  # Expect loops vars
+  #    -d       DC         dc1 or dc2 for example
+  #    -t       VM Type    ex1 or ex2 for example
+  # or single host
+  #    -c       CN Common Name         vc-ex1-dc1
+#WIP
+}
