@@ -5,5 +5,76 @@ fn_GenCert()
   #    -t       VM Type    ex1 or ex2 for example
   # or single host
   #    -c       CN Common Name         vc-ex1-dc1
-#WIP
+
+  local file_Hosts=${file_Hosts:-~/etc/hosts.txtdb"
+  local lst_Hosts=$(scorchdb -f ${file_Hosts} -hostname ${ENVIRONMENT})
+  local tmp_File=/tmp/x.$$
+  
+  Message "Checking Servers: ${lst_Hosts}"
+  # WIP add check for servers
+
+  lst_DC=${lst_DC:-dc1 dc2}
+  lst_VM=${lst_VM:-ex1 ex2}
+
+  FQDN="${FQDN:-.yourdomain.local"
+  dir_TMP="${dir_CertsTmp" && mkdir -p ${dir_TMP}
+  # WIP add check for dirCertsTmp
+
+  for each_DC in ${lst_DC} ; do
+    for each_VM in ${lst_VM} ; do
+      Message $SECTIONBREAK
+      CN=$(scorchdb   -f ${file_Hosts} -hostname ${each_VM} ${ENVIRONMENT ${each_DC})
+      TYPE=$(scorchdb -f ${file_Hosts} -type     ${each_VM} ${ENVIRONMENT ${each_DC})
+      ID="${ENVIRONMENT:-1}"
+      tmp_File="${dir_Tmp}/${each_CN}.config"
+
+     Message "Creating CERT for source: ${each_CN} ${VM} ${ENVIRONMENT} ${each_DC}"
+     # https://${each_CN,,}${FQDN,,}
+     # https://${TYPE,,}-${each_DC,,}.${ENVIRONMENT,,}${FQDN,,}
+
+     Message "  Creating config file: ${tmp_File}"
+     cat > ${tmp_File} << EOF
+[req]
+distinguished_name = dn
+req_extension = v3_req
+prompt = no
+
+[dn]
+CN = ${each_CN,,}${FQDN,,}
+
+[v3_req]
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = ${each_CN,,]${FQDN,,}
+DNS.2 = ${TYPE,,}${ID,,}-${each_DC,,}$FQDN,,}
+EOF
+      if [[ "${each_VM}" == "ex1" ]] ; then
+        cat >> ${tmp_File} << EOF
+DNS.3 = ${TYPE}${ID}-console
+DNS.4 = ${TYPE}${ID}-console${FQDN}
+EOF
+      fi
+
+      [[ $? != 0 ]] && Error "When creating file ${tmp_File}"
+
+      Message "    Creating certificate file: ${dir_TMP}/${each_CN}.csr"
+      Message "    Creating key file:         ${dir_TMP}/${each_CN}.key"
+
+      cmd_OPENSSL="openssl req -new -out ${dir_TMP}/${each_CN}.csr -newkey rsa:2048 -nodes -sha256 -leyout ${dir_TMP}/$each_CN}/key -config ...."
+      Message "Running ${cmd_OPENSSL}"
+      $cmd_OPENSSL
+      [[ $? != 0 ]] && Error "Issue while running openssl:
+      ${cmd_OPENSSL}"
+
+      Message "Upload ${dir_TMP}/${each_CN}.csr to ${url_JenkinsSign}"
+    done
+  done
+
+  [[ ${int_WarningCount} > 0 ]] && Error "Too many errors to continue"
+
+  Message "Certificates created: ${url_JenkinsSign}"
+
 }
