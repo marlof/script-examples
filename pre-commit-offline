@@ -1,0 +1,168 @@
+#!/bin/sh
+
+# ============================================================================
+# Modular, future-proof pre-commit hook framework
+# Each check is implemented as a function.
+# Toggle checks by commenting out a single function call at the bottom.
+# Used where development is done in offline environments
+# ============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+FAILED=0
+
+echo -e "${GREEN}Pre-commit: running modular quality checks...${NC}"
+
+# Gather staged files (added/copied/modified only)
+FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+# ----------------------------------------------------------------------------
+# 1. Prevent direct commits to main/master
+# ----------------------------------------------------------------------------
+check_branch_protection() {
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
+        echo -e "${RED}✖ You cannot commit directly to ${BRANCH}.${NC}"
+        FAILED=1
+    fi
+}
+
+# ----------------------------------------------------------------------------
+# 2. Trailing whitespace
+# ----------------------------------------------------------------------------
+check_trailing_whitespace() {
+    for f in $FILES; do
+        [ -f "$f" ] || continue
+        MATCHES=$(grep -nE "[[:space:]]+$" "$f")
+        if [ -n "$MATCHES" ]; then
+            echo -e "${RED}✖ Trailing whitespace found in $f:${NC}"
+            echo "$MATCHES"
+            FAILED=1
+        fi
+    done
+}
+
+# ----------------------------------------------------------------------------
+# 3. Missing newline at EOF
+# ----------------------------------------------------------------------------
+check_eof_newline() {
+    for f in $FILES; do
+        [ -f "$f" ] || continue
+        if [ -s "$f" ] && [ -n "$(tail -c1 "$f")" ]; then
+            echo -e "${YELLOW}✖ Missing newline at end of file: $f${NC}"
+            FAILED=1
+        fi
+    done
+}
+
+# ----------------------------------------------------------------------------
+# 4. Tabs instead of spaces
+# ----------------------------------------------------------------------------
+check_tabs() {
+    for f in $FILES; do
+        [ -f "$f" ] || continue
+        TABS=$(grep -n $'\t' "$f")
+        if [ -n "$TABS" ]; then
+            echo -e "${RED}✖ Tabs found in $f:${NC}"
+            echo "$TABS"
+            FAILED=1
+        fi
+    done
+}
+
+# ----------------------------------------------------------------------------
+# 5. Detect CRLF (Windows) line endings
+# ----------------------------------------------------------------------------
+check_crlf() {
+    for f in $FILES; do
+        [ -f "$f" ] || continue
+        if grep -q $'\r' "$f"; then
+            echo -e "${RED}✖ CRLF line endings found in $f${NC}"
+            FAILED=1
+        fi
+    done
+}
+
+# ----------------------------------------------------------------------------
+# 6. Merge conflict markers
+# ----------------------------------------------------------------------------
+check_merge_conflicts() {
+    for f in $FILES; do
+        [ -f "$f" ] || continue
+        if grep -nE '^(<<<<<<<|=======|>>>>>>>|^^^^^^^)$' "$f" >/dev/null; then
+            echo -e "${RED}✖ Merge conflict markers found in $f${NC}"
+            FAILED=1
+        fi
+    done
+}
+
+# ----------------------------------------------------------------------------
+# 7. Forbidden debug or TODO statements
+# ----------------------------------------------------------------------------
+check_forbidden_phrases() {
+    FORBIDDEN='(console\.log|debugger|print *\(|TODO|FIXME)'
+    for f in $FILES; do
+        [ -f "$f" ] || continue
+        BAD=$(grep -nE "$FORBIDDEN" "$f")
+        if [ -n "$BAD" ]; then
+            echo -e "${RED}✖ Forbidden debug/TODO/FIXME in $f:${NC}"
+            echo "$BAD"
+            FAILED=1
+        fi
+    done
+}
+
+# ----------------------------------------------------------------------------
+# 8. Large file detection (>1MB)
+# ----------------------------------------------------------------------------
+check_large_files() {
+    MAX=$((1 * 1024 * 1024))
+    for f in $FILES; do
+        [ -f "$f" ] || continue
+        SIZE=$(stat -c%s "$f")
+        if [ "$SIZE" -gt "$MAX" ]; then
+            echo -e "${RED}✖ File too large (>1MB): $f (${SIZE} bytes)${NC}"
+            FAILED=1
+        fi
+    done
+}
+
+# ----------------------------------------------------------------------------
+# 9. Basic secret detection
+# ----------------------------------------------------------------------------
+check_secrets() {
+    SECRET_PATTERNS='(AKIA[0-9A-Z]{16}|-----BEGIN PRIVATE KEY-----|ssh-rsa|ssh-ed25519|password=|SECRET_KEY)'
+    for f in $FILES; do
+        [ -f "$f" ] || continue
+        SECRET=$(grep -nE "$SECRET_PATTERNS" "$f")
+        if [ -n "$SECRET" ]; then
+            echo -e "${RED}✖ Possible secret detected in $f:${NC}"
+            echo "$SECRET"
+            FAILED=1
+        fi
+    done
+}
+
+# ============================================================================
+# CALL CHECKS HERE (TOGGLE BY COMMENTING OUT)
+# ============================================================================
+check_branch_protection
+check_trailing_whitespace
+check_eof_newline
+check_tabs
+check_crlf
+check_merge_conflicts
+check_forbidden_phrases
+check_large_files
+check_secrets
+# ============================================================================
+
+if [ $FAILED -ne 0 ]; then
+    echo -e "${RED}\n❌ Commit aborted due to quality issues.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✔ All checks passed. Commit accepted.${NC}"
+exit 0
